@@ -238,11 +238,30 @@
     }
 
     function saveWord(content, data, filename) {
-        const zip = new PizZip(content);
-        const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
-        doc.render(data);
-        const out = doc.getZip().generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-        saveAs(out, filename);
+        try {
+            const zip = new PizZip(content);
+            const doc = new window.docxtemplater(zip, { 
+                paragraphLoop: true, 
+                linebreaks: true,
+                // Thêm trình xử lý lỗi để bỏ qua các tag bị hỏng
+                parser: function(tag) {
+                    return {
+                        get: function(scope) {
+                            return scope[tag] !== undefined ? scope[tag] : "";
+                        }
+                    };
+                }
+            });
+            doc.render(data);
+            const out = doc.getZip().generate({ 
+                type: "blob", 
+                mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
+            });
+            saveAs(out, filename);
+        } catch (error) {
+            console.error("Chi tiết lỗi:", error);
+            alert("Vẫn còn lỗi ở tag: " + (error.properties?.errors?.[0]?.message || "Không xác định"));
+        }
     }
 
     function resetData() { if(confirm("Xóa toàn bộ dữ liệu?")) location.reload(); }
