@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Kiểm Phiếu Bầu Cử HĐND 2026</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* Giao diện nhập liệu */
+        body { background-color: #f0f2f5; font-family: 'Segoe UI', Arial, sans-serif; }
+        .main-container { max-width: 900px; margin: 30px auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        h1 { color: #1a73e8; font-weight: bold; text-align: center; margin-bottom: 25px; text-transform: uppercase; border-bottom: 3px solid #1a73e8; padding-bottom: 10px; }
+        .candidate-item { font-size: 1.2rem; padding: 12px; border-radius: 10px; transition: 0.2s; border: 1px solid #eee; margin-bottom: 8px; width: 100%; max-width: 400px; }
+        .candidate-item:hover { background-color: #fff5f5; border-color: #ff7675; }
+        .form-check-input { width: 1.6em; height: 1.6em; border-color: #d63031; cursor: pointer; }
+        .stat-box { text-align: center; padding: 20px; border-radius: 12px; color: white; font-weight: bold; font-size: 1.1rem; }
+        .bg-invalid { background-color: #d63031; }
+        .bg-valid { background-color: #00b894; }
+        .bg-total { background-color: #2d3436; }
+        .btn-confirm { height: 70px; font-size: 1.5rem; font-weight: bold; background: linear-gradient(135deg, #0984e3, #6c5ce7); border: none; transition: 0.3s; }
+        .btn-confirm:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+
+        /* CẤU TRÚC BIÊN BẢN ĐỂ IN (ẨN TRÊN WEB) */
+        #printArea { display: none; }
+
+        @media print {
+            body * { visibility: hidden; }
+            #printArea, #printArea * { visibility: visible; }
+            #printArea { display: block !important; position: absolute; left: 0; top: 0; width: 100%; padding: 0; margin: 0; background: white; color: black; }
+            .page-break { page-break-before: always; }
+            .print-content { font-family: "Times New Roman", serif; font-size: 13pt; line-height: 1.5; padding: 1cm 1.5cm 1cm 2cm; }
+            .table-print { width: 100%; border-collapse: collapse; margin: 15px 0; }
+            .table-print th, .table-print td { border: 1px solid black; padding: 5px 10px; }
+            .text-center { text-align: center; }
+            .fw-bold { font-weight: bold; }
+            .uppercase { text-transform: uppercase; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container no-print">
+    <div class="main-container">
+        <h1>Hệ Thống Kiểm Phiếu 2026</h1>
+
+        <div class="card mb-4 border-primary">
+            <div class="card-header bg-primary text-white fw-bold">1. THÔNG TIN CƠ SỞ</div>
+            <div class="card-body row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">Tỉnh/Thành phố:</label>
+                    <input type="text" id="inputTinh" class="form-control" placeholder="Ví dụ: Hà Nội">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">Tổ bầu cử số:</label>
+                    <input type="text" id="inputTo" class="form-control" placeholder="Ví dụ: 01">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">Tổng số cử tri:</label>
+                    <input type="number" id="votersInput" class="form-control" value="100">
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4 border-danger">
+            <div class="card-header bg-danger text-white fw-bold">2. NHẬP PHIẾU (Tích chọn người BỊ GẠCH)</div>
+            <div class="card-body d-flex flex-column align-items-center" id="candidateList"></div>
+        </div>
+
+        <button id="btnConfirm" class="btn btn-confirm w-100 mb-4 text-white shadow">XÁC NHẬN PHIẾU (ENTER)</button>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-4"><div class="stat-box bg-total shadow-sm">TỔNG THU: <span id="totalBallots">0</span></div></div>
+            <div class="col-md-4"><div class="stat-box bg-valid shadow-sm">HỢP LỆ: <span id="validBallots">0</span></div></div>
+            <div class="col-md-4"><div class="stat-box bg-invalid shadow-sm">KHÔNG HỢP LỆ: <span id="invalidBallots">0</span></div></div>
+        </div>
+
+        <div class="d-flex justify-content-between gap-2">
+            <button class="btn btn-warning fw-bold flex-grow-1 py-3" onclick="showSummary()">BẢNG TỔNG HỢP</button>
+            <button class="btn btn-success fw-bold flex-grow-1 py-3" onclick="prepareAndPrint()">IN BIÊN BẢN (23 & 24)</button>
+            <button class="btn btn-outline-secondary fw-bold" onclick="resetData()">LÀM MỚI</button>
+        </div>
+    </div>
+</div>
+
+<div id="printArea">
+    <div class="print-content">
+        <div class="row">
+            <div class="col-5 text-center">
+                <p class="uppercase">Tỉnh: <span class="view-tinh">...</span></p>
+                <p class="fw-bold uppercase">TỔ BẦU CỬ SỐ: <span class="view-to">...</span></p>
+            </div>
+            <div class="col-7 text-center">
+                <p class="fw-bold">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
+                <p class="fw-bold">Độc lập - Tự do - Hạnh phúc</p>
+                <p>----------</p>
+            </div>
+        </div>
+        <h3 class="text-center fw-bold mt-4">BIÊN BẢN KẾT QUẢ KIỂM PHIẾU BẦU CỬ<br>ĐẠI BIỂU HỘI ĐỒNG NHÂN DÂN NHIỆM KỲ 2026-2031</h3>
+        <p class="mt-3">Hôm nay, ngày <span class="v-ngay"></span> tháng <span class="v-thang"></span> năm 2026, Tổ bầu cử đã tiến hành kiểm phiếu với kết quả:</p>
+        <p>- Tổng số cử tri: <b><span class="v-tong-ct"></span></b> người.</p>
+        <p>- Số phiếu thu vào: <b><span class="v-thu"></span></b> phiếu.</p>
+        <p>- Số phiếu hợp lệ: <b><span class="v-hople"></span></b> phiếu.</p>
+        <p>- Số phiếu không hợp lệ: <b><span class="v-khonghople"></span></b> phiếu.</p>
+        
+        <p class="fw-bold mt-3">KẾT QUẢ BẦU CHO TỪNG NGƯỜI ỨNG CỬ:</p>
+        <table class="table-print">
+            <thead>
+                <tr class="text-center">
+                    <th>STT</th>
+                    <th>Họ và tên người ứng cử</th>
+                    <th>Số phiếu đồng ý</th>
+                    <th>Tỷ lệ (%)</th>
+                </tr>
+            </thead>
+            <tbody id="printTable23"></tbody>
+        </table>
+        <div class="row mt-5">
+            <div class="col-6 text-center">THƯ KÝ<br><br><br>(Ký, họ tên)</div>
+            <div class="col-6 text-center">TỔ TRƯỞNG<br><br><br>(Ký tên, đóng dấu)</div>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <div class="print-content">
+        <div class="text-center">
+            <p class="fw-bold">BIÊN BẢN XÁC ĐỊNH KẾT QUẢ BẦU CỬ (MẪU 24)</p>
+            <p>Đơn vị bầu cử số: <span class="view-to">...</span></p>
+        </div>
+        <p class="mt-4 fw-bold text-decoration-underline">DANH SÁCH NHỮNG NGƯỜI TRÚNG CỬ:</p>
+        <div id="printWinners24"></div>
+        <p class="mt-4 fst-italic">Biên bản này được lập thành 03 bản vào lúc .... giờ cùng ngày.</p>
+    </div>
+</div>
+
+<div class="modal fade" id="summaryModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title fw-bold">BẢNG TỔNG HỢP KẾT QUẢ CHI TIẾT</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <table class="table table-bordered">
+                    <thead class="table-light text-center">
+                        <tr><th>STT</th><th>Ứng cử viên</th><th>Phiếu bầu</th><th>Tỷ lệ</th></tr>
+                    </thead>
+                    <tbody id="summaryTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const CONFIG = {
+        candidates: ["Trung Hải", "Tâm Hiền", "Văn Hùng", "Hồng Linh", "Đức Tuấn", "Thế Uyên"],
+        maxToElect: 5
+    };
+
+    let data = { totalBallots: 0, validBallots: 0, invalidBallots: 0, votes: new Array(CONFIG.candidates.length).fill(0) };
+
+    function renderCandidates() {
+        document.getElementById('candidateList').innerHTML = CONFIG.candidates.map((name, i) => `
+            <div class="form-check candidate-item">
+                <input class="form-check-input" type="checkbox" id="chk_${i}">
+                <label class="form-check-label fw-bold ms-2" for="chk_${i}">${i + 1}. ${name}</label>
+            </div>
+        `).join('');
+    }
+
+    function processVote() {
+        const checks = document.querySelectorAll('.form-check-input');
+        let gach = 0; let selected = [];
+        checks.forEach((c, i) => { 
+            if (c.checked) gach++; 
+            else selected.push(i);
+        });
+
+        const conLai = CONFIG.candidates.length - gach;
+        data.totalBallots++;
+        if (conLai === 0 || conLai > CONFIG.maxToElect) {
+            data.invalidBallots++;
+        } else {
+            data.validBallots++;
+            selected.forEach(idx => data.votes[idx]++);
+        }
+        
+        // Reset & Update UI
+        checks.forEach(c => c.checked = false);
+        document.getElementById('totalBallots').innerText = data.totalBallots;
+        document.getElementById('validBallots').innerText = data.validBallots;
+        document.getElementById('invalidBallots').innerText = data.invalidBallots;
+    }
+
+    function showSummary() {
+        if (data.totalBallots === 0) return alert("Chưa có dữ liệu!");
+        let html = CONFIG.candidates.map((name, i) => {
+            const v = data.votes[i];
+            const p = data.validBallots > 0 ? ((v / data.validBallots) * 100).toFixed(2) : "0.00";
+            return `<tr><td class="text-center">${i+1}</td><td>${name}</td><td class="text-center">${v}</td><td class="text-center">${p}%</td></tr>`;
+        }).join('');
+        document.getElementById('summaryTableBody').innerHTML = html;
+        new bootstrap.Modal(document.getElementById('summaryModal')).show();
+    }
+
+    function prepareAndPrint() {
+        if (data.totalBallots === 0) return alert("Chưa có dữ liệu để in!");
+        
+        const now = new Date();
+        const tinh = document.getElementById('inputTinh').value || "............";
+        const to = document.getElementById('inputTo').value || "......";
+
+        // Đổ thông tin chung
+        document.querySelectorAll('.view-tinh').forEach(el => el.innerText = tinh);
+        document.querySelectorAll('.view-to').forEach(el => el.innerText = to);
+        document.querySelector('.v-ngay').innerText = now.getDate();
+        document.querySelector('.v-thang').innerText = now.getMonth() + 1;
+        document.querySelector('.v-tong-ct').innerText = document.getElementById('votersInput').value;
+        document.querySelector('.v-thu').innerText = data.totalBallots;
+        document.querySelector('.v-hople').innerText = data.validBallots;
+        document.querySelector('.v-khonghople').innerText = data.invalidBallots;
+
+        // Đổ bảng Mẫu 23
+        let table23 = CONFIG.candidates.map((name, i) => {
+            const v = data.votes[i];
+            const p = data.validBallots > 0 ? ((v / data.validBallots) * 100).toFixed(2) : "0.00";
+            return `<tr><td class="text-center">${i+1}</td><td>${name}</td><td class="text-center">${v}</td><td class="text-center">${p}%</td></tr>`;
+        }).join('');
+        document.getElementById('printTable23').innerHTML = table23;
+
+        // Đổ danh sách trúng cử Mẫu 24
+        let winners = CONFIG.candidates.map((name, i) => ({ name, v: data.votes[i], p: data.validBallots > 0 ? ((data.votes[i]/data.validBallots)*100).toFixed(2) : "0.00" }))
+            .sort((a,b) => b.v - a.v).slice(0, CONFIG.maxToElect);
+        
+        let html24 = winners.map((w, i) => `<p>${i+1}. Ông/Bà: <b>${w.name}</b> - Đạt: ${w.v} phiếu (${w.p}%)</p>`).join('');
+        document.getElementById('printWinners24').innerHTML = html24;
+
+        window.print();
+    }
+
+    function resetData() { if(confirm("Xóa toàn bộ dữ liệu làm lại từ đầu?")) location.reload(); }
+    document.getElementById('btnConfirm').addEventListener('click', processVote);
+    window.addEventListener('keydown', (e) => { if(e.key === 'Enter') processVote(); });
+    renderCandidates();
+</script>
+</body>
+</html>
