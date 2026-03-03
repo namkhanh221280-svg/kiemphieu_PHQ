@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Kiểm Phiếu HĐND Online</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.4/pizzip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.37.2/docxtemplater.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <style>
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', sans-serif; }
+        .main-container { max-width: 850px; margin: 20px auto; background: white; padding: 25px; border-radius: 12px; shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .candidate-item { font-size: 1.1rem; padding: 8px; border-bottom: 1px solid #eee; }
+        .stat-box { text-align: center; padding: 12px; border-radius: 8px; color: white; font-weight: bold; margin-bottom: 10px; }
+        .bg-invalid { background-color: #e74c3c; }
+        .bg-valid { background-color: #27ae60; }
+        .bg-total { background-color: #34495e; }
+        .winner-row { background-color: #e8f6f3 !important; }
+    </style>
+</head>
+<body>
+
+<div class="container main-container">
+    <h2 class="text-center mb-4 fw-bold">HỆ THỐNG KIỂM PHIẾU BẦU CỬ</h2>
+
+    <div class="card mb-3 border-danger">
+        <div class="card-header bg-danger text-white fw-bold">Chọn người BỊ GẠCH</div>
+        <div class="card-body">
+            <div id="candidateList" class="row gx-5"></div>
+        </div>
+    </div>
+
+    <button id="btnConfirm" class="btn btn-success w-100 mb-4 fw-bold py-3 shadow">XÁC NHẬN PHIẾU (ENTER)</button>
+
+    <div class="row text-white mb-4">
+        <div class="col-md-4"><div class="stat-box bg-total">Tổng thu: <span id="totalBallots">0</span></div></div>
+        <div class="col-md-4"><div class="stat-box bg-valid">Hợp lệ: <span id="validBallots">0</span></div></div>
+        <div class="col-md-4"><div class="stat-box bg-invalid">KHÔNG HỢP LỆ: <span id="invalidBallots">0</span></div></div>
+    </div>
+
+    <div class="d-flex gap-2">
+        <button class="btn btn-warning fw-bold flex-grow-1" onclick="showSummary()">XEM KẾT QUẢ</button>
+        <button class="btn btn-primary fw-bold flex-grow-1" onclick="exportReports()">XUẤT MẪU 23 & 24</button>
+        <button class="btn btn-outline-secondary fw-bold" onclick="resetData()">LÀM MỚI</button>
+    </div>
+</div>
+
+<div class="modal fade" id="summaryModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title">BẢNG TỔNG HỢP CHI TIẾT</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <table class="table table-bordered align-middle">
+                    <thead class="table-light text-center">
+                        <tr><th>STT</th><th>Ứng cử viên</th><th>Số phiếu</th><th>Tỷ lệ %</th></tr>
+                    </thead>
+                    <tbody id="summaryTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    const CONFIG = {
+        candidates: ["Trung Hải", "Tâm Hiền", "Văn Hùng", "Hồng Linh", "Đức Tuấn", "Thế Uyên"],
+        maxToElect: 5
+    };
+
+    let data = { totalBallots: 0, validBallots: 0, invalidBallots: 0, votes: new Array(CONFIG.candidates.length).fill(0) };
+
+    function renderCandidates() {
+        document.getElementById('candidateList').innerHTML = CONFIG.candidates.map((name, i) => `
+            <div class="col-md-6 candidate-item">
+                <div class="form-check">
+                    <input class="form-check-input border-danger" type="checkbox" id="chk_${i}">
+                    <label class="form-check-label fw-bold" for="chk_${i}">${i+1}. ${name}</label>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function processVote() {
+        const checks = document.querySelectorAll('.form-check-input');
+        let gachCount = 0; let votedIdx = [];
+        checks.forEach((c, i) => { if(c.checked) gachCount++; else votedIdx.push(i); });
+
+        const conLai = CONFIG.candidates.length - gachCount;
+        data.totalBallots++;
+        if (conLai === 0 || conLai > CONFIG.maxToElect) {
+            data.invalidBallots++;
+        } else {
+            data.validBallots++;
+            votedIdx.forEach(idx => data.votes[idx]++);
+        }
+        updateUI();
+        checks.forEach(c => c.checked = false);
+    }
+
+    function updateUI() {
+        document.getElementById('totalBallots').innerText = data.totalBallots;
+        document.getElementById('validBallots').innerText = data.validBallots;
+        document.getElementById('invalidBallots').innerText = data.invalidBallots;
+    }
+
+    // --- XUẤT FILE WORD (BẢN FIX TRIỆT ĐỂ) ---
+    async function exportReports() {
+        if(data.validBallots === 0) return alert("Chưa có phiếu hợp lệ!");
+
+        const context = {
+            tong_phieu_thu: data.totalBallots,
+            phiieu_hop_le: data.validBallots, // Giữ nguyên 2 chữ 'i' để khớp file Mau_23 của anh
+            phiieu_khong_hop_le: data.invalidBallots,
+            ngay: new Date().getDate(),
+            thang: new Date().getMonth() + 1,
+            nam: 2026
+        };
+
+        CONFIG.candidates.forEach((name, i) => {
+            const v = data.votes[i];
+            const p = ((v / data.validBallots) * 100).toFixed(2);
+            context[`ten_${i+1}`] = name;
+            context[`v_${i+1}`] = v;
+            context[`p_${i+1}`] = p;
+        });
+
+        const sorted = CONFIG.candidates.map((n, i) => ({ n, v: data.votes[i], p: ((data.votes[i]/data.validBallots)*100).toFixed(2) }))
+                       .sort((a,b) => b.v - a.v);
+
+        for(let i=0; i<CONFIG.maxToElect; i++) {
+            context[`trung_ten_${i+1}`] = sorted[i].n;
+            context[`trung_v_${i+1}`] = sorted[i].v;
+            context[`trung_p_${i+1}`] = sorted[i].p;
+        }
+
+        try {
+            await generateDocx("Mau_23.docx", context, "Ket_Qua_Mau_23.docx");
+            await generateDocx("Mau_24.docx", context, "Ket_Qua_Mau_24.docx");
+            alert("✅ Thành công!");
+        } catch (e) {
+            console.error(e);
+            alert("❌ Lỗi tải file mẫu từ GitHub. Kiểm tra tên file Mau_23.docx (viết hoa chữ M).");
+        }
+    }
+
+    function generateDocx(url, data, filename) {
+        return new Promise((resolve, reject) => {
+            fetch("./" + url + "?v=" + Date.now()) // Chống cache GitHub
+            .then(r => { if(!r.ok) throw new Error(); return r.arrayBuffer(); })
+            .then(content => {
+                const zip = new PizZip(content);
+                const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+                doc.render(data);
+                const out = doc.getZip().generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+                saveAs(out, filename);
+                resolve();
+            }).catch(reject);
+        });
+    }
+
+    function showSummary() {
+        const sorted = CONFIG.candidates.map((n, i) => ({ n, v: data.votes[i], p: ((data.votes[i]/data.validBallots)*100).toFixed(2) }))
+                       .sort((a,b) => b.v - a.v);
+        document.getElementById('summaryTableBody').innerHTML = sorted.map((item, i) => `
+            <tr class="${i < CONFIG.maxToElect ? 'winner-row' : ''}">
+                <td class="text-center">${i+1}</td>
+                <td>${item.n}</td>
+                <td class="text-center">${item.v}</td>
+                <td class="text-center fw-bold">${item.p}%</td>
+            </tr>
+        `).join('');
+        new bootstrap.Modal(document.getElementById('summaryModal')).show();
+    }
+
+    function resetData() { if(confirm("Xóa hết?")) location.reload(); }
+    document.getElementById('btnConfirm').addEventListener('click', processVote);
+    window.addEventListener('keydown', e => { if(e.key==='Enter') processVote(); });
+    renderCandidates();
+</script>
+</body>
+</html>
