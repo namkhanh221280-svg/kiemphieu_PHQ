@@ -129,6 +129,7 @@
     let data = { totalBallots: 0, validBallots: 0, invalidBallots: 0, votes: new Array(CONFIG.candidates.length).fill(0) };
     let loadedTemplates = { mau23: null, mau24: null };
 
+    // Nạp file mẫu
     function loadTemplate(event, type) {
         const file = event.target.files[0];
         if (!file) return;
@@ -140,6 +141,7 @@
         reader.readAsArrayBuffer(file);
     }
 
+    // Hiển thị danh sách ứng cử viên
     function renderCandidates() {
         const container = document.getElementById('candidateList');
         container.innerHTML = CONFIG.candidates.map((name, index) => `
@@ -150,6 +152,7 @@
         `).join('');
     }
 
+    // Xử lý khi nhấn Xác nhận phiếu
     function processVote() {
         const checkboxes = document.querySelectorAll('.form-check-input');
         let gachCount = 0; let selectedIndexes = [];
@@ -174,17 +177,18 @@
         document.getElementById('invalidBallots').innerText = data.invalidBallots;
     }
 
+    // Xem kết quả tổng hợp
     function showSummary() {
-        if (data.validBallots === 0) return alert("Chưa có dữ liệu!");
+        if (data.totalBallots === 0) return alert("Chưa có dữ liệu!");
         const tbody = document.getElementById('summaryTableBody');
         let summaryData = CONFIG.candidates.map((name, i) => {
             const v = data.votes[i];
-            const percent = (v / data.validBallots) * 100;
+            const percent = data.validBallots > 0 ? (v / data.validBallots) * 100 : 0;
             return { name, v, percent };
         }).sort((a, b) => b.v - a.v);
 
         tbody.innerHTML = summaryData.map((item, idx) => `
-            <tr class="${idx < CONFIG.maxToElect ? 'winner-row' : ''}">
+            <tr class="${idx < CONFIG.maxToElect && item.v > 0 ? 'winner-row' : ''}">
                 <td class="text-center">${idx + 1}</td>
                 <td>${item.name}</td>
                 <td class="text-center">${item.v} / ${data.validBallots}</td>
@@ -194,65 +198,61 @@
         new bootstrap.Modal(document.getElementById('summaryModal')).show();
     }
 
+    // LOGIC XUẤT FILE: LẤY DỮ LIỆU TỪ BẢNG TỔNG HỢP
     async function exportReports() {
-    if (!loadedTemplates.mau23 || !loadedTemplates.mau24) {
-        alert("⚠️ Anh chưa nạp file mẫu! Hãy chọn tệp ở Bước 1.");
-        return;
-    }
+        if (!loadedTemplates.mau23 || !loadedTemplates.mau24) {
+            alert("⚠️ Anh chưa nạp file mẫu docx từ máy tính!");
+            return;
+        }
 
-    // LẤY DỮ LIỆU TRỰC TIẾP TỪ BẢNG TỔNG HỢP (Mục tiêu của anh)
-    let summaryData = CONFIG.candidates.map((name, i) => {
-        const v = data.votes[i];
-        const percent = data.validBallots > 0 ? ((v / data.validBallots) * 100).toFixed(2) : "0.00";
-        return { name, v, percent, originalIndex: i };
-    });
+        // Chuẩn bị dữ liệu từ bảng tổng hợp (Context)
+        const now = new Date();
+        const context = {
+            tong_phieu_thu: data.totalBallots,
+            phiieu_hop_le: data.validBallots, // Tag có 2 chữ i
+            phiieu_khong_hop_le: data.invalidBallots,
+            ngay: now.getDate(), thang: now.getMonth() + 1, nam: 2026
+        };
 
-    // Tạo context để điền vào file
-    const now = new Date();
-    const context = {
-        tong_phieu_thu: data.totalBallots,
-        phiieu_hop_le: data.validBallots, // Khớp với tag {{phiieu_hop_le}} trong file của anh
-        phiieu_khong_hop_le: data.invalidBallots,
-        ngay: now.getDate(),
-        thang: now.getMonth() + 1,
-        nam: 2026
-    };
+        // Đưa 6 ứng cử viên vào tag theo đúng dữ liệu tổng hợp
+        CONFIG.candidates.forEach((name, i) => {
+            const v = data.votes[i];
+            const p = data.validBallots > 0 ? ((v / data.validBallots) * 100).toFixed(2) : "0.00";
+            context[`ten_${i + 1}`] = name;
+            context[`v_${i + 1}`] = v;
+            context[`p_${i + 1}`] = p;
+        });
 
-    // 1. Điền danh sách toàn bộ ứng cử viên (Dùng cho Mẫu 23 và phần đầu Mẫu 24)
-    summaryData.forEach((item, i) => {
-        context[`ten_${i + 1}`] = item.name;
-        context[`v_${i + 1}`] = item.v;
-        context[`p_${i + 1}`] = item.percent;
-    });
+        // Sắp xếp lấy danh sách trúng cử (Mẫu 24)
+        const sorted = CONFIG.candidates.map((name, i) => ({
+            name, v: data.votes[i], p: data.validBallots > 0 ? ((data.votes[i] / data.validBallots) * 100).toFixed(2) : "0.00"
+        })).sort((a, b) => b.v - a.v);
 
-    // 2. Điền danh sách người trúng cử (Dùng cho Mẫu 24 - Lấy theo thứ tự từ cao xuống thấp)
-    let winners = [...summaryData].sort((a, b) => b.v - a.v);
-    for (let i = 0; i < CONFIG.maxToElect; i++) {
-        if (winners[i]) {
-            context[`trung_ten_${i + 1}`] = winners[i].name;
-            context[`trung_v_${i + 1}`] = winners[i].v;
-            context[`trung_p_${i + 1}`] = winners[i].percent;
+        for (let i = 0; i < CONFIG.maxToElect; i++) {
+            if (sorted[i]) {
+                context[`trung_ten_${i + 1}`] = sorted[i].name;
+                context[`trung_v_${i + 1}`] = sorted[i].v;
+                context[`trung_p_${i + 1}`] = sorted[i].p;
+            }
+        }
+
+        try {
+            // Sử dụng hàm renderAndSave thống nhất
+            renderAndSave(loadedTemplates.mau23, context, "Ket_Qua_Mau_23.docx");
+            renderAndSave(loadedTemplates.mau24, context, "Ket_Qua_Mau_24.docx");
+            alert("✅ Đã lấy dữ liệu từ bảng tổng hợp và in file thành công!");
+        } catch (error) {
+            alert("Lỗi khi tạo file. Hãy kiểm tra các tag {{ }} trong file mẫu.");
         }
     }
 
-    // Tiến hành in file
-    try {
-        renderAndSave(loadedTemplates.mau23, context, "Ket_Qua_Mau_23.docx");
-        renderAndSave(loadedTemplates.mau24, context, "Ket_Qua_Mau_24.docx");
-        alert("✅ Đã lấy dữ liệu từ bảng tổng hợp và xuất file thành công!");
-    } catch (error) {
-        console.error(error);
-        alert("Lỗi render. Anh hãy kiểm tra lại các tag {{ }} trong file Word.");
-    }
-}
-
-    function saveWord(content, data, filename) {
+    // Hàm render chính
+    function renderAndSave(content, data, filename) {
         try {
             const zip = new PizZip(content);
             const doc = new window.docxtemplater(zip, { 
                 paragraphLoop: true, 
                 linebreaks: true,
-                // Thêm trình xử lý lỗi để bỏ qua các tag bị hỏng
                 parser: function(tag) {
                     return {
                         get: function(scope) {
@@ -262,14 +262,11 @@
                 }
             });
             doc.render(data);
-            const out = doc.getZip().generate({ 
-                type: "blob", 
-                mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
-            });
+            const out = doc.getZip().generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
             saveAs(out, filename);
-        } catch (error) {
-            console.error("Chi tiết lỗi:", error);
-            alert("Vẫn còn lỗi ở tag: " + (error.properties?.errors?.[0]?.message || "Không xác định"));
+        } catch (e) {
+            console.error(e);
+            throw e;
         }
     }
 
