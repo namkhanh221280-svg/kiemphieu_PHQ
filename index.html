@@ -205,57 +205,88 @@
         const now = new Date();
         const context = {
             tong_phieu_thu: data.totalBallots,
-            phiieu_hop_le: data.validBallots, // Khớp với tag {{phiieu_hop_le}} trong mẫu của anh
+            phiieu_hop_le: data.validBallots, // Khớp với {{phiieu_hop_le}} trong file docx của anh
             phiieu_khong_hop_le: data.invalidBallots,
             ngay: now.getDate(),
             thang: now.getMonth() + 1,
             nam: now.getFullYear()
         };
 
-        // Đổ dữ liệu ứng cử viên
+        // Đổ dữ liệu ứng cử viên (v_1, p_1, ten_1...)
         CONFIG.candidates.forEach((name, i) => {
             const v = data.votes[i];
             const p = ((v / data.validBallots) * 100).toFixed(2);
             context[`ten_${i + 1}`] = name;
             context[`v_${i + 1}`] = v;
-            context[`p_${i + 1}`] = p + "%";
+            context[`p_${i + 1}`] = p; // Trong file của anh là {{p_1}} phiếu hợp lệ
         });
 
-        // Sắp xếp trúng cử (cho Mẫu 24)
+        // Sắp xếp danh sách trúng cử theo số phiếu giảm dần (cho Mẫu 24)
         const sorted = CONFIG.candidates.map((name, i) => ({
-            n: name, v: data.votes[i], p: ((data.votes[i] / data.validBallots) * 100).toFixed(2)
+            n: name, 
+            v: data.votes[i], 
+            p: ((data.votes[i] / data.validBallots) * 100).toFixed(2)
         })).sort((a, b) => b.v - a.v);
 
+        // Đổ dữ liệu người trúng cử (trung_ten_1, trung_v_1...)
         for (let i = 0; i < CONFIG.maxToElect; i++) {
-            context[`trung_ten_${i + 1}`] = sorted[i].n;
-            context[`trung_v_${i + 1}`] = sorted[i].v;
-            context[`trung_p_${i + 1}`] = sorted[i].p;
+            if (sorted[i]) {
+                context[`trung_ten_${i + 1}`] = sorted[i].n;
+                context[`trung_v_${i + 1}`] = sorted[i].v;
+                context[`trung_p_${i + 1}`] = sorted[i].p;
+            }
         }
 
         try {
+            // Gọi hàm tạo file
             await generateDocx("Mau_23.docx", context, "Ket_Qua_Mau_23.docx");
             await generateDocx("Mau_24.docx", context, "Ket_Qua_Mau_24.docx");
-            alert("✅ Xuất thành công! Vui lòng kiểm tra thư mục tải xuống.");
+            alert("✅ Xuất thành công! Kiểm tra thư mục Downloads.");
         } catch (e) {
-            alert("❌ Lỗi: Hãy đảm bảo file Mau_23.docx và Mau_24.docx đã được upload lên GitHub cùng thư mục với file HTML.");
+            console.error("Lỗi chi tiết:", e);
+            alert("❌ Lỗi: Không thể tải file mẫu. Hãy chắc chắn Mau_23.docx và Mau_24.docx nằm cùng thư mục với index.html trên GitHub.");
         }
     }
 
+    /**
+     * Hàm lõi để xử lý Template Word
+     */
     function generateDocx(templateUrl, data, outName) {
         return new Promise((resolve, reject) => {
-            fetch(templateUrl).then(r => {
-                if(!r.ok) reject();
-                return r.arrayBuffer();
-            }).then(content => {
-                const zip = new PizZip(content);
-                const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
-                doc.render(data);
-                const out = doc.getZip().generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-                saveAs(out, outName);
-                resolve();
-            }).catch(reject);
+            // Thêm ./ và timestamp để tránh lỗi cache của GitHub Pages
+            const finalUrl = "./" + templateUrl + "?v=" + new Date().getTime();
+            
+            fetch(finalUrl)
+                .then(r => {
+                    if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+                    return r.arrayBuffer();
+                })
+                .then(content => {
+                    const zip = new PizZip(content);
+                    const doc = new window.docxtemplater(zip, { 
+                        paragraphLoop: true, 
+                        linebreaks: true 
+                    });
+                    
+                    doc.render(data);
+                    
+                    const out = doc.getZip().generate({ 
+                        type: "blob", 
+                        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
+                    });
+                    
+                    saveAs(out, outName);
+                    resolve();
+                })
+                .catch(err => {
+                    console.error("Lỗi tại file:", templateUrl, err);
+                    reject(err);
+                });
         });
     }
+	
+	
+	
 
     function resetData() {
         if(confirm("Xóa toàn bộ dữ liệu hiện tại?")) {
