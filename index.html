@@ -221,21 +221,30 @@
             border-radius: 20px;
             padding: 15px 25px;
             display: flex;
+            flex-direction: column;
             gap: 15px;
             align-items: center;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
             margin-bottom: 20px;
+            max-width: 1100px;
+            width: 100%;
+        }
+
+        .audio-settings-wrapper {
+            display: flex;
+            gap: 15px;
             flex-wrap: wrap;
             justify-content: center;
+            width: 100%;
         }
 
         .audio-setting-box {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             background: rgba(255, 255, 255, 0.1);
-            padding: 8px 15px;
-            border-radius: 12px;
+            padding: 8px 12px;
+            border-radius: 10px;
             border: 1px dashed rgba(255, 215, 0, 0.5);
             font-size: 0.85rem;
         }
@@ -243,6 +252,12 @@
         .audio-setting-box label {
             color: #ffd700;
             font-weight: 700;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
         }
 
         .btn-action {
@@ -362,8 +377,9 @@
 
     <canvas id="fireworks-canvas"></canvas>
 
-    <!-- Thẻ âm thanh để phát file nhạc từ ngoài -->
-    <audio id="custom-audio" style="display: none;"></audio>
+    <!-- Thẻ âm thanh để phát từ file chọn bên ngoài -->
+    <audio id="station-audio" style="display: none;"></audio>
+    <audio id="victory-audio" style="display: none;"></audio>
 
     <!-- Banner Header -->
     <div class="main-banner">
@@ -382,13 +398,21 @@
 
     <!-- Bảng điều khiển Admin & Chọn File Âm Thanh -->
     <div class="admin-controls-bar">
-        <div class="audio-setting-box">
-            <label for="audio-file-input">🎵 Nhạc mừng chiến thắng:</label>
-            <input type="file" id="audio-file-input" accept="audio/*">
+        <div class="audio-settings-wrapper">
+            <div class="audio-setting-box">
+                <label for="station-audio-input">🔔 Nhạc xong mỗi Trạm:</label>
+                <input type="file" id="station-audio-input" accept="audio/*">
+            </div>
+            <div class="audio-setting-box">
+                <label for="victory-audio-input">🏆 Nhạc Chung Cuộc:</label>
+                <input type="file" id="victory-audio-input" accept="audio/*">
+            </div>
         </div>
 
-        <button class="btn-action" id="btn-next-step" onclick="nextStation()">Lưu Điểm & Sang Trạm Tiếp Theo ➔</button>
-        <button class="btn-reset" onclick="resetAllScores()">Đặt Lại Tất Cả Điểm</button>
+        <div class="button-group">
+            <button class="btn-action" id="btn-next-step" onclick="nextStation()">Lưu Điểm & Sang Trạm Tiếp Theo ➔</button>
+            <button class="btn-reset" onclick="resetAllScores()">Đặt Lại Tất Cả Điểm</button>
+        </div>
     </div>
 
     <!-- Bảng Tổng Kết Kết Quả -->
@@ -413,7 +437,6 @@
     </div>
 
     <script>
-        // Cấu hình đúng 4 Trạm
         const stations = [
             "TRẠM I: QUẢNG NINH – TỪ TÊN GỌI LỊCH SỬ ĐẾN KHÁT VỌNG THÀNH PHỐ",
             "TRẠM II: TỪ NHẬN THỨC ĐẾN HÀNH ĐỘNG",
@@ -430,15 +453,21 @@
         ];
 
         let currentStationIndex = 0;
-        // Điểm số 5 đội x 4 trạm
         let stationScores = Array.from({ length: 4 }, () => Array(5).fill(0));
 
-        // Xử lý chọn nhạc từ máy tính
-        document.getElementById('audio-file-input').addEventListener('change', function(e) {
+        // Tải nhạc xong mỗi Trạm
+        document.getElementById('station-audio-input').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
-                const audioEl = document.getElementById('custom-audio');
-                audioEl.src = URL.createObjectURL(file);
+                document.getElementById('station-audio').src = URL.createObjectURL(file);
+            }
+        });
+
+        // Tải nhạc Chung cuộc
+        document.getElementById('victory-audio-input').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('victory-audio').src = URL.createObjectURL(file);
             }
         });
 
@@ -507,8 +536,8 @@
                 updateScoreFromInput(i);
             }
 
-            // Tự động nhảy trạm đến hết Trạm 4 (index 3)
             if (currentStationIndex < 3) {
+                playStationAudio(); // Phát âm thanh chuyển trạm
                 currentStationIndex++;
                 initUI();
                 if (currentStationIndex === 3) {
@@ -516,6 +545,17 @@
                 }
             } else {
                 finishCompetition();
+            }
+        }
+
+        function playStationAudio() {
+            const audioEl = document.getElementById('station-audio');
+            if (audioEl.src) {
+                audioEl.currentTime = 0;
+                audioEl.play().catch(e => console.log(e));
+            } else {
+                // Tiếng ting tinh mặc định nếu chưa tải nhạc
+                playDefaultBeep();
             }
         }
 
@@ -578,54 +618,44 @@
                 document.getElementById('summary-section').style.display = 'none';
                 document.getElementById('btn-next-step').innerText = "Lưu Điểm & Sang Trạm Tiếp Theo ➔";
                 
-                const audioEl = document.getElementById('custom-audio');
-                audioEl.pause();
-                audioEl.currentTime = 0;
+                const victoryAudio = document.getElementById('victory-audio');
+                victoryAudio.pause();
+                victoryAudio.currentTime = 0;
 
                 initUI();
             }
         }
 
-        /* Hiệu ứng Phát Nhạc & Pháo Hoa */
         function triggerVictoryEffects() {
-            playCustomMusic();
+            playVictoryAudio();
             startFireworks();
         }
 
-        function playCustomMusic() {
-            const audioEl = document.getElementById('custom-audio');
+        function playVictoryAudio() {
+            const audioEl = document.getElementById('victory-audio');
             if (audioEl.src) {
                 audioEl.currentTime = 0;
-                audioEl.play().catch(e => console.log("Cần tương tác người dùng để phát âm thanh"));
+                audioEl.play().catch(e => console.log(e));
             } else {
-                // Nếu chưa chọn nhạc bên ngoài thì phát tiếng reo hò bằng Web Audio API
-                playCheeringAudio();
+                playDefaultBeep();
             }
         }
 
-        function playCheeringAudio() {
+        // Tiếng beep hệ thống nếu chưa chọn file âm thanh
+        function playDefaultBeep() {
             try {
                 const AudioCtx = window.AudioContext || window.webkitAudioContext;
                 const ctx = new AudioCtx();
-                let bufferSize = ctx.sampleRate * 3;
-                let buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-                let data = buffer.getChannelData(0);
-                for (let i = 0; i < bufferSize; i++) {
-                    data[i] = Math.random() * 2 - 1;
-                }
-                let noise = ctx.createBufferSource();
-                noise.buffer = buffer;
-                let filter = ctx.createBiquadFilter();
-                filter.type = 'bandpass';
-                filter.frequency.value = 1000;
-                let noiseGain = ctx.createGain();
-                noiseGain.gain.setValueAtTime(0.3, ctx.currentTime);
-                noiseGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 3);
-
-                noise.connect(filter);
-                filter.connect(noiseGain);
-                noiseGain.connect(ctx.destination);
-                noise.start();
+                let osc = ctx.createOscillator();
+                let gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+                gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.5);
             } catch(e) {}
         }
 
